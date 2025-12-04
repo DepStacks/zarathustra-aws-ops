@@ -1,0 +1,15 @@
+# MCP Server Configuration
+# Define MCP servers that Zarathustra AWS Ops can connect to
+
+servers:
+  # AWS Operations MCP Server
+  aws-ops:
+    url: ${MCP_AWS_OPS_URL:-http://localhost:8100}
+    auth_token: ${MCP_AWS_OPS_TOKEN}
+    description: "AWS operations - Secrets Manager, Route53, S3, etc."
+    
+  # Add more MCP servers here as needed
+  # example:
+  #   url: http://example-mcp:8000
+  #   auth_token: ${EXAMPLE_MCP_TOKEN}
+  #   description: "Example MCP server"

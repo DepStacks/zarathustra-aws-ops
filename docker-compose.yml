@@ -1,0 +1,38 @@
+version: '3.8'
+
+services:
+  zarathustra-aws-ops:
+    build: .
+    container_name: zarathustra-aws-ops
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./logs:/app/logs
+      - ~/.aws:/root/.aws:ro  # Mount AWS credentials for local dev
+    networks:
+      - zarathustra-network
+    depends_on:
+      - aws-ops-mcp
+
+  # AWS Ops MCP Server (optional - can use external)
+  aws-ops-mcp:
+    image: depstacks/tool-aws-ops:latest
+    container_name: aws-ops-mcp
+    restart: unless-stopped
+    ports:
+      - "8100:8000"
+    environment:
+      - AWS_REGION=${AWS_REGION:-us-east-1}
+      - MCP_AUTH_TOKEN=${MCP_AWS_OPS_TOKEN}
+    volumes:
+      - ~/.aws:/root/.aws:ro
+    networks:
+      - zarathustra-network
+
+networks:
+  zarathustra-network:
+    driver: bridge
