@@ -17,6 +17,7 @@ from botocore.exceptions import ClientError, NoCredentialsError
 from dotenv import load_dotenv
 
 from ..core.workflow_manager import WorkflowManager
+from ..integrations.slack_responder import SlackResponder
 
 logging.basicConfig(
     level=logging.INFO,
@@ -64,8 +65,11 @@ class ZarathustraAWSOpsListener:
             logger.error("AWS credentials not found. Please configure AWS credentials.")
             raise
         
-        # Initialize HTTP client for callbacks
+        # Initialize HTTP client for generic callbacks
         self.http_client = httpx.Client(timeout=30.0)
+        
+        # Initialize Slack responder for Slack-specific responses
+        self.slack_responder = SlackResponder()
         
         # Initialize Workflow Manager
         self.workflow_manager = WorkflowManager(
@@ -116,17 +120,28 @@ class ZarathustraAWSOpsListener:
             request_text = message_body.get('request') or message_body.get('prompt')
             logger.info(f"Processing message {message_id}: {request_text[:100]}...")
             
+            # Check if this is a Slack message
+            source = message_body.get('source', '')
+            metadata = message_body.get('metadata', {})
+            is_slack = source == 'slack' or metadata.get('slack_event_type')
+            
+            # Get Slack response_url from metadata or callback_url
+            slack_response_url = metadata.get('slack_response_url') or message_body.get('callback_url')
+            
             # Process through workflow manager
             result = self.workflow_manager.process_aws_operation(message_body)
             
+            # Always delete the message after processing (success or failure)
+            self._delete_message(receipt_handle)
+            
             if result['success']:
                 logger.info(f"Successfully processed message {message_id}")
-                self._delete_message(receipt_handle)
                 
-                # Send callback if configured
-                callback_url = message_body.get('callback_url')
-                if callback_url:
-                    self._send_callback(callback_url, message_id, result)
+                # Send response back
+                if is_slack and slack_response_url:
+                    self._send_slack_response(slack_response_url, result)
+                elif message_body.get('callback_url'):
+                    self._send_callback(message_body['callback_url'], message_id, result)
                 
                 return {
                     'success': True,
@@ -134,11 +149,19 @@ class ZarathustraAWSOpsListener:
                     'result': result
                 }
             else:
-                logger.error(f"Failed to process message {message_id}: {result.get('error', 'Unknown error')}")
+                error_msg = result.get('error', 'Unknown error')
+                logger.error(f"Failed to process message {message_id}: {error_msg}")
+                
+                # Send error response back
+                if is_slack and slack_response_url:
+                    self._send_slack_error(slack_response_url, error_msg)
+                elif message_body.get('callback_url'):
+                    self._send_callback(message_body['callback_url'], message_id, result)
+                
                 return {
                     'success': False,
                     'message_id': message_id,
-                    'error': result.get('error', 'Processing failed')
+                    'error': error_msg
                 }
                 
         except json.JSONDecodeError as e:
@@ -151,6 +174,17 @@ class ZarathustraAWSOpsListener:
             }
         except Exception as e:
             logger.error(f"Error processing message {message_id}: {e}")
+            
+            # Try to send error to Slack if possible
+            try:
+                message_body = json.loads(message['Body'])
+                metadata = message_body.get('metadata', {})
+                slack_response_url = metadata.get('slack_response_url') or message_body.get('callback_url')
+                if slack_response_url and message_body.get('source') == 'slack':
+                    self._send_slack_error(slack_response_url, str(e))
+            except:
+                pass
+            
             return {
                 'success': False,
                 'message_id': message_id,
@@ -167,6 +201,33 @@ class ZarathustraAWSOpsListener:
             logger.debug("Message deleted from queue")
         except Exception as e:
             logger.error(f"Failed to delete message: {e}")
+    
+    def _send_slack_response(self, response_url: str, result: Dict[str, Any]):
+        """Send successful result to Slack via response_url"""
+        try:
+            # Format the agent's response for Slack
+            agent_result = result.get('result', {})
+            formatted_response = self.slack_responder.format_agent_response(agent_result)
+            
+            self.slack_responder.send_response(
+                response_url=response_url,
+                text=formatted_response,
+                success=True,
+                response_type="in_channel"
+            )
+        except Exception as e:
+            logger.error(f"Failed to send Slack response: {e}")
+    
+    def _send_slack_error(self, response_url: str, error_message: str):
+        """Send error message to Slack via response_url"""
+        try:
+            self.slack_responder.send_error(
+                response_url=response_url,
+                error_message=f"*Error processing request:*\n{error_message}",
+                response_type="ephemeral"
+            )
+        except Exception as e:
+            logger.error(f"Failed to send Slack error: {e}")
     
     def _send_callback(self, callback_url: str, message_id: str, result: Dict[str, Any]):
         """Send result to callback URL"""
@@ -251,6 +312,7 @@ class ZarathustraAWSOpsListener:
         logger.info("Shutting down executor...")
         self.executor.shutdown(wait=True)
         self.http_client.close()
+        self.slack_responder.close()
         self.workflow_manager.close()
         logger.info("Zarathustra AWS Ops Listener stopped")
 

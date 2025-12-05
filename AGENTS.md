@@ -13,12 +13,25 @@ AI Agent for AWS Operations using MCP (Model Context Protocol) tools. Processes 
 3. **src/core/workflow_manager.py** - Request orchestration
 4. **src/core/agent.py** - LangChain agent with MCP tools
 5. **src/integrations/mcp_client.py** - MCP server communication
-6. **src/resources/prompt.md** - Agent system prompt
+6. **src/integrations/slack_responder.py** - Slack response handler
+7. **src/resources/prompt.md** - Agent system prompt
 
 ### Data Flow
 
 ```
 SQS Message → SQS Listener → Workflow Manager → Agent → MCP Client → MCP Server → AWS
+                    ↓
+              Slack Responder → Slack (via response_url)
+```
+
+### Slack Integration Flow
+
+```
+Slack /zara → zarathustra-api → SQS → zarathustra-aws-ops → Agent → MCP → AWS
+                                              ↓
+                                        Slack Responder
+                                              ↓
+                                        Slack (response)
 ```
 
 ## Code Conventions
@@ -137,6 +150,37 @@ self.mcp_client.add_server(MCPServer(
   "response": "Agent response text",
   "error": null
 }
+```
+
+## Slack Response Integration
+
+### How It Works
+1. SQS message contains `source: "slack"` and `metadata.slack_response_url`
+2. SQS Listener detects Slack message and processes via WorkflowManager
+3. Agent executes request using MCP tools
+4. SlackResponder sends formatted response to `response_url`
+
+### Slack Message Detection
+```python
+# In sqs_listener.py
+is_slack = source == 'slack' or metadata.get('slack_event_type')
+slack_response_url = metadata.get('slack_response_url') or callback_url
+```
+
+### Response Format
+- Success: ✅ + formatted agent response
+- Error: ❌ + error message (ephemeral, only visible to user)
+
+### SlackResponder Methods
+```python
+# Send success response
+slack_responder.send_response(response_url, text, success=True)
+
+# Send error response
+slack_responder.send_error(response_url, error_message)
+
+# Format agent result for Slack
+formatted = slack_responder.format_agent_response(agent_result)
 ```
 
 ## Security Mandates
