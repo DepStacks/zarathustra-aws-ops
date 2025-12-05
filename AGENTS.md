@@ -13,7 +13,7 @@ AI Agent for AWS Operations using MCP (Model Context Protocol) tools. Processes 
 3. **src/core/workflow_manager.py** - Request orchestration
 4. **src/core/agent.py** - LangChain agent with MCP tools
 5. **src/integrations/mcp_client.py** - MCP server communication
-6. **src/integrations/slack_responder.py** - Slack response handler
+6. **src/integrations/slack_responder.py** - Slack helper for responses
 7. **src/resources/prompt.md** - Agent system prompt
 
 ### Data Flow
@@ -158,7 +158,7 @@ self.mcp_client.add_server(MCPServer(
 1. SQS message contains `source: "slack"` and `metadata.slack_response_url`
 2. SQS Listener detects Slack message and processes via WorkflowManager
 3. Agent executes request using MCP tools
-4. SlackResponder sends formatted response to `response_url`
+4. Slack helper sends formatted response to `response_url`
 
 ### Slack Message Detection
 ```python
@@ -171,16 +171,16 @@ slack_response_url = metadata.get('slack_response_url') or callback_url
 - Success: ✅ + formatted agent response
 - Error: ❌ + error message (ephemeral, only visible to user)
 
-### SlackResponder Methods
+### Slack helper methods
 ```python
 # Send success response
-slack_responder.send_response(response_url, text, success=True)
+slack.send_response(response_url, text, success=True)
 
 # Send error response
-slack_responder.send_error(response_url, error_message)
+slack.send_error(response_url, error_message)
 
 # Format agent result for Slack
-formatted = slack_responder.format_agent_response(agent_result)
+formatted = slack.format_agent_response(agent_result)
 ```
 
 ## Security Mandates

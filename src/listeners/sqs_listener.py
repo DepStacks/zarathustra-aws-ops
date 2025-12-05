@@ -17,7 +17,7 @@ from botocore.exceptions import ClientError, NoCredentialsError
 from dotenv import load_dotenv
 
 from ..core.workflow_manager import WorkflowManager
-from ..integrations.slack_responder import SlackResponder
+from ..integrations.slack_responder import Slack
 
 logging.basicConfig(
     level=logging.INFO,
@@ -68,8 +68,8 @@ class ZarathustraAWSOpsListener:
         # Initialize HTTP client for generic callbacks
         self.http_client = httpx.Client(timeout=30.0)
         
-        # Initialize Slack responder for Slack-specific responses
-        self.slack_responder = SlackResponder()
+        # Initialize Slack helper for Slack-specific responses
+        self.slack = Slack()
         
         # Initialize Workflow Manager
         self.workflow_manager = WorkflowManager(
@@ -207,9 +207,9 @@ class ZarathustraAWSOpsListener:
         try:
             # Format the agent's response for Slack
             agent_result = result.get('result', {})
-            formatted_response = self.slack_responder.format_agent_response(agent_result)
+            formatted_response = self.slack.format_agent_response(agent_result)
             
-            self.slack_responder.send_response(
+            self.slack.send_response(
                 response_url=response_url,
                 text=formatted_response,
                 success=True,
@@ -221,7 +221,7 @@ class ZarathustraAWSOpsListener:
     def _send_slack_error(self, response_url: str, error_message: str):
         """Send error message to Slack via response_url"""
         try:
-            self.slack_responder.send_error(
+            self.slack.send_error(
                 response_url=response_url,
                 error_message=f"*Error processing request:*\n{error_message}",
                 response_type="ephemeral"
@@ -312,7 +312,7 @@ class ZarathustraAWSOpsListener:
         logger.info("Shutting down executor...")
         self.executor.shutdown(wait=True)
         self.http_client.close()
-        self.slack_responder.close()
+        self.slack.close()
         self.workflow_manager.close()
         logger.info("Zarathustra AWS Ops Listener stopped")
 

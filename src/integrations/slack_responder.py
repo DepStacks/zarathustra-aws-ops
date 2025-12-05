@@ -1,6 +1,4 @@
-"""
-Slack Responder - Sends responses back to Slack via response_url
-"""
+"""Slack helper - sends responses back to Slack via response_url."""
 
 import logging
 from typing import Dict, Any, Optional
@@ -10,9 +8,8 @@ import httpx
 logger = logging.getLogger(__name__)
 
 
-class SlackResponder:
-    """
-    Handles sending responses back to Slack.
+class Slack:
+    """Helpers to send responses back to Slack.
     
     Uses Slack's response_url (from slash commands) or Web API
     to send formatted messages back to the user.
