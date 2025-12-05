@@ -127,6 +127,7 @@ self.mcp_client.add_server(MCPServer(
 - `MCP_AWS_OPS_TOKEN` - MCP auth token
 - `MAX_WORKERS` - Parallel workers (default: 5)
 - `LOG_LEVEL` - Logging level (default: INFO)
+ - `DRY_RUN` - When `true`, agent does not call LLM/tools and always returns "Agent is in dry run mode"
 
 ## SQS Message Format
 

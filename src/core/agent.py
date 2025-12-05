@@ -34,6 +34,12 @@ class AWSOpsAgent:
         mcp_servers: List[Dict[str, str]] = None
     ):
         self.openai_api_key = openai_api_key
+        # Dry-run mode: when enabled, the agent will not call the LLM/tools
+        self.dry_run = os.getenv("DRY_RUN", "false").lower() in ("1", "true", "yes", "on")
+        if self.dry_run:
+            logger.warning(
+                "AWS Ops Agent started in DRY RUN mode - LLM and MCP tools will not be executed",
+            )
         
         # Initialize LLM
         self.llm = ChatOpenAI(
@@ -296,7 +302,18 @@ Be precise, security-conscious, and efficient."""
             Dictionary containing the response and metadata
         """
         context = context or {}
-        
+
+        # Dry-run: skip calling the LLM and tools entirely
+        if self.dry_run:
+            logger.info("DRY RUN: received request: %s", user_request)
+            if context:
+                logger.debug("DRY RUN context: %s", context)
+            return {
+                "success": True,
+                "response": "Agent is in dry run mode",
+                "intermediate_steps": [],
+            }
+
         # Build full input with context
         full_input = user_request
         if context:
